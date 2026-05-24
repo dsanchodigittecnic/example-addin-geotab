@@ -184,7 +184,14 @@ function Dashboard({ api, state }) {
               new Date(t.start).getTime();
             if (!isNaN(ms)) tripSec = ms / 1000;
           }
-          totals[devId].idleDuration += t.idleDuration || 0;
+          var idleVal = t.idlingDuration;
+          var idleSec = 0;
+          if (typeof idleVal === 'number') {
+            idleSec = idleVal;
+          } else if (idleVal && idleVal.totalSeconds) {
+            idleSec = idleVal.totalSeconds;
+          }
+          totals[devId].idleDuration += idleSec;
           totals[devId].tripDuration += tripSec;
         });
 
