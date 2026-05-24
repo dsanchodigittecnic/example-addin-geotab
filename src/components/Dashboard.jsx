@@ -3,6 +3,84 @@ import { Alert, Button, Waiting, TextInput } from '@geotab/zenith';
 import '@geotab/zenith/dist/index.css';
 import { t } from '../i18n';
 
+var styles = {
+  page: {
+    padding: '24px',
+    fontFamily: 'Roboto, Segoe UI, sans-serif',
+    color: 'var(--text-primary)',
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '24px',
+  },
+  title: {
+    fontSize: '28px',
+    fontWeight: 500,
+    margin: 0,
+  },
+  sessionInfo: {
+    marginBottom: '24px',
+    fontSize: '14px',
+    color: 'var(--text-secondary)',
+  },
+  grid: {
+    display: 'flex',
+    gap: '16px',
+    marginBottom: '24px',
+  },
+  card: {
+    flex: 1,
+    background: 'var(--backgrounds-main)',
+    padding: '24px',
+    borderRadius: '8px',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+  },
+  cardLabel: {
+    fontSize: '14px',
+    color: 'var(--text-secondary)',
+    marginBottom: '8px',
+  },
+  cardValue: {
+    fontSize: '2em',
+    fontWeight: 700,
+    color: 'var(--action-primary--default)',
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    marginTop: '16px',
+  },
+  th: {
+    padding: '12px',
+    borderBottom: '1px solid var(--borders-general)',
+    textAlign: 'left',
+    fontSize: '12px',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    color: 'var(--text-secondary)',
+  },
+  td: {
+    padding: '12px',
+    borderBottom: '1px solid var(--borders-general)',
+    fontSize: '14px',
+  },
+  emptyState: {
+    padding: '24px',
+    textAlign: 'center',
+    color: 'var(--text-secondary)',
+  },
+  loadingWrap: {
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '48px',
+  },
+  searchWrap: {
+    marginBottom: '8px',
+  },
+};
+
 function Dashboard({ api, state }) {
   var lang = (state && state.language) || 'en';
   var [session, setSession] = useState(null);
@@ -51,190 +129,89 @@ function Dashboard({ api, state }) {
     : [];
 
   return (
-    <div style={{ padding: 'var(--zenith-spacing-lg)' }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 'var(--zenith-spacing-lg)',
-        }}
-      >
-        <h1 style={{ fontSize: 'var(--zenith-font-size-xxl)', margin: 0 }}>
-          {t(lang, 'appTitle')}
-        </h1>
+    <div style={styles.page}>
+      <div style={styles.header}>
+        <h1 style={styles.title}>{t(lang, 'appTitle')}</h1>
         <Button variant="primary" onClick={loadData}>
           {t(lang, 'refresh')}
         </Button>
       </div>
 
       {session && (
-        <div
-          style={{
-            marginBottom: 'var(--zenith-spacing-lg)',
-            color: 'var(--zenith-neutral-900)',
-          }}
-        >
+        <div style={styles.sessionInfo}>
           {t(lang, 'connectedAs')}: <strong>{session.userName}</strong> &mdash;{' '}
           {t(lang, 'database')}: <strong>{session.database}</strong>
         </div>
       )}
 
       {error && (
-        <Alert variant="error" style={{ marginBottom: 'var(--zenith-spacing-md)' }}>
+        <Alert variant="error" style={{ marginBottom: '16px' }}>
           {error}
         </Alert>
       )}
 
       {loading ? (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            padding: 'var(--zenith-spacing-xl)',
-          }}
-        >
+        <div style={styles.loadingWrap}>
           <Waiting size="large" />
         </div>
       ) : (
         <>
-          <div
-            style={{
-              display: 'flex',
-              gap: 'var(--zenith-spacing-md)',
-              marginBottom: 'var(--zenith-spacing-lg)',
-            }}
-          >
-            <StatCard
-              label={t(lang, 'totalVehicles')}
-              value={vehicles ? vehicles.length : '--'}
-            />
-            <StatCard
-              label={t(lang, 'totalDrivers')}
-              value={drivers ? drivers.length : '--'}
-            />
+          <div style={styles.grid}>
+            <div style={styles.card}>
+              <div style={styles.cardLabel}>{t(lang, 'totalVehicles')}</div>
+              <div style={styles.cardValue}>
+                {vehicles ? vehicles.length : '--'}
+              </div>
+            </div>
+            <div style={styles.card}>
+              <div style={styles.cardLabel}>{t(lang, 'totalDrivers')}</div>
+              <div style={styles.cardValue}>
+                {drivers ? drivers.length : '--'}
+              </div>
+            </div>
           </div>
 
-          <TextInput
-            label={t(lang, 'vehicles')}
-            value={search}
-            onChange={function (e) {
-              setSearch(e.target.value);
-            }}
-            placeholder={t(lang, 'vehicles') + '...'}
-          />
-
-          <div style={{ marginTop: 'var(--zenith-spacing-md)' }}>
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
+          <div style={styles.searchWrap}>
+            <TextInput
+              label={t(lang, 'vehicles')}
+              value={search}
+              onChange={function (e) {
+                setSearch(e.target.value);
               }}
-            >
-              <thead>
-                <tr>
-                  <th
-                    style={{
-                      padding: '12px',
-                      borderBottom: '1px solid var(--zenith-neutral-100)',
-                      color: 'var(--zenith-neutral-900)',
-                      textAlign: 'left',
-                    }}
-                  >
-                    {t(lang, 'vehicles')}
-                  </th>
-                  <th
-                    style={{
-                      padding: '12px',
-                      borderBottom: '1px solid var(--zenith-neutral-100)',
-                      color: 'var(--zenith-neutral-900)',
-                      textAlign: 'left',
-                    }}
-                  >
-                    Serial
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredVehicles.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan="2"
-                      style={{
-                        padding: '24px',
-                        textAlign: 'center',
-                        color: 'var(--zenith-neutral-900)',
-                      }}
-                    >
-                      {vehicles && vehicles.length === 0
-                        ? t(lang, 'loading')
-                        : t(lang, 'error')}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredVehicles.map(function (v) {
-                    return (
-                      <tr key={v.id}>
-                        <td
-                          style={{
-                            padding: '12px',
-                            borderBottom:
-                              '1px solid var(--zenith-neutral-100)',
-                          }}
-                        >
-                          {v.name || '--'}
-                        </td>
-                        <td
-                          style={{
-                            padding: '12px',
-                            borderBottom:
-                              '1px solid var(--zenith-neutral-100)',
-                          }}
-                        >
-                          {v.serialNumber || '--'}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+              placeholder={t(lang, 'vehicles') + '...'}
+            />
           </div>
+
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.th}>{t(lang, 'vehicles')}</th>
+                <th style={styles.th}>Serial</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredVehicles.length === 0 ? (
+                <tr>
+                  <td colSpan="2" style={styles.emptyState}>
+                    {vehicles && vehicles.length === 0
+                      ? t(lang, 'loading')
+                      : t(lang, 'error')}
+                  </td>
+                </tr>
+              ) : (
+                filteredVehicles.map(function (v) {
+                  return (
+                    <tr key={v.id}>
+                      <td style={styles.td}>{v.name || '--'}</td>
+                      <td style={styles.td}>{v.serialNumber || '--'}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </>
       )}
-    </div>
-  );
-}
-
-function StatCard({ label, value }) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        background: 'white',
-        padding: 'var(--zenith-spacing-lg)',
-        borderRadius: '8px',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-      }}
-    >
-      <div
-        style={{
-          fontSize: 'var(--zenith-font-size-md)',
-          color: 'var(--zenith-neutral-900)',
-          marginBottom: 'var(--zenith-spacing-sm)',
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: '2em',
-          fontWeight: 'bold',
-          color: 'var(--zenith-primary)',
-        }}
-      >
-        {value}
-      </div>
     </div>
   );
 }
