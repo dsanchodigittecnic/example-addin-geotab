@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Alert, Button, Waiting, DateInput } from '@geotab/zenith';
+import { Alert, Button, Waiting, DateInput, Table } from '@geotab/zenith';
 import '@geotab/zenith/dist/index.css';
 import { t } from '../i18n';
 import MechanicView from './MechanicView';
@@ -119,8 +119,78 @@ function Dashboard({ api, state }) {
   var [rows, setRows] = useState(null);
   var [error, setError] = useState(null);
   var [loading, setLoading] = useState(true);
-  var [sortKey, setSortKey] = useState('idlePct');
-  var [sortDir, setSortDir] = useState('desc');
+  var [sortSettings, setSortSettings] = useState(null);
+
+  var sortable = sortSettings
+    ? { value: sortSettings, onChange: function (s) { setSortSettings(s); } }
+    : undefined;
+
+  var columns = [
+    {
+      id: 'name',
+      name: 'name',
+      header: t(lang, 'vehicle'),
+      sortable: true,
+      meta: { defaultWidth: 200 },
+      render: function (entity) {
+        return React.createElement('span', {
+          style: { cursor: 'pointer', color: 'var(--text-hyperlink)' },
+          onClick: function () {
+            window.parent.location.hash = 'device,id:' + entity.id;
+          },
+        }, entity.name);
+      },
+    },
+    {
+      id: 'serial',
+      name: 'serial',
+      header: t(lang, 'serial'),
+      sortable: true,
+      meta: { defaultWidth: 150 },
+    },
+    {
+      id: 'tripDuration',
+      name: 'tripDuration',
+      header: t(lang, 'tripTime'),
+      sortable: true,
+      meta: { defaultWidth: 120 },
+      render: function (entity) {
+        return fmtTime(entity.tripDuration);
+      },
+    },
+    {
+      id: 'idleDuration',
+      name: 'idleDuration',
+      header: t(lang, 'idleTime'),
+      sortable: true,
+      meta: { defaultWidth: 120 },
+      render: function (entity) {
+        return fmtTime(entity.idleDuration);
+      },
+    },
+    {
+      id: 'idlePct',
+      name: 'idlePct',
+      header: t(lang, 'idlePercent'),
+      sortable: true,
+      meta: { defaultWidth: 100 },
+      render: function (entity) {
+        return fmtPct(entity.idlePct);
+      },
+    },
+    {
+      id: 'fuelLevel',
+      name: 'fuelLevel',
+      header: t(lang, 'fuel'),
+      sortable: true,
+      meta: { defaultWidth: 100 },
+      render: function (entity) {
+        return entity.fuelLevel !== null
+          ? entity.fuelLevel.toFixed(1) + '%'
+          : '--';
+      },
+    },
+  ];
 
   var loadData = useCallback(function () {
     setLoading(true);
@@ -252,30 +322,18 @@ function Dashboard({ api, state }) {
     loadData();
   }, [loadData]);
 
-  function toggleSort(key) {
-    if (sortKey === key) {
-      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(key);
-      setSortDir(key === 'idlePct' ? 'desc' : 'asc');
-    }
-  }
-
-  function sortArrow(key) {
-    if (sortKey !== key) return '';
-    return sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
-  }
-
-  var sorted = rows
+  var sortedRows = rows
     ? [].concat(rows).sort(function (a, b) {
-        var va = a[sortKey];
-        var vb = b[sortKey];
+        var key = sortSettings ? sortSettings.sortColumn : 'idlePct';
+        var dir = sortSettings ? sortSettings.sortDirection : 'desc';
+        var va = a[key];
+        var vb = b[key];
         if (typeof va === 'string') {
-          return sortDir === 'asc'
+          return dir === 'asc'
             ? va.localeCompare(vb)
             : vb.localeCompare(va);
         }
-        return sortDir === 'asc' ? va - vb : vb - va;
+        return dir === 'asc' ? va - vb : vb - va;
       })
     : [];
 
@@ -378,138 +436,18 @@ function Dashboard({ api, state }) {
             </div>
           </div>
 
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th
-                  style={{
-                    ...styles.th,
-                    ...(sortKey === 'name' ? styles.thActive : {}),
-                  }}
-                  onClick={function () {
-                    toggleSort('name');
-                  }}
-                >
-                  {t(lang, 'vehicle')}
-                  {sortArrow('name')}
-                </th>
-                <th
-                  style={{
-                    ...styles.th,
-                    ...(sortKey === 'serial' ? styles.thActive : {}),
-                  }}
-                  onClick={function () {
-                    toggleSort('serial');
-                  }}
-                >
-                  {t(lang, 'serial')}
-                  {sortArrow('serial')}
-                </th>
-                <th
-                  style={{
-                    ...styles.th,
-                    textAlign: 'right',
-                    ...(sortKey === 'tripDuration'
-                      ? styles.thActive
-                      : {}),
-                  }}
-                  onClick={function () {
-                    toggleSort('tripDuration');
-                  }}
-                >
-                  {t(lang, 'tripTime')}
-                  {sortArrow('tripDuration')}
-                </th>
-                <th
-                  style={{
-                    ...styles.th,
-                    textAlign: 'right',
-                    ...(sortKey === 'idleDuration'
-                      ? styles.thActive
-                      : {}),
-                  }}
-                  onClick={function () {
-                    toggleSort('idleDuration');
-                  }}
-                >
-                  {t(lang, 'idleTime')}
-                  {sortArrow('idleDuration')}
-                </th>
-                <th
-                  style={{
-                    ...styles.th,
-                    textAlign: 'right',
-                    ...(sortKey === 'idlePct' ? styles.thActive : {}),
-                  }}
-                  onClick={function () {
-                    toggleSort('idlePct');
-                  }}
-                >
-                  {t(lang, 'idlePercent')}
-                  {sortArrow('idlePct')}
-                </th>
-                <th
-                  style={{
-                    ...styles.th,
-                    textAlign: 'right',
-                    ...(sortKey === 'fuelLevel' ? styles.thActive : {}),
-                  }}
-                  onClick={function () {
-                    toggleSort('fuelLevel');
-                  }}
-                >
-                  {t(lang, 'fuel')}
-                  {sortArrow('fuelLevel')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.length === 0 ? (
-                <tr>
-                  <td colSpan="6" style={styles.emptyState}>
-                    {t(lang, 'noData')}
-                  </td>
-                </tr>
-              ) : (
-                sorted.map(function (r) {
-                  return (
-                    <tr
-                      key={r.id}
-                      style={styles.clickableRow}
-                      onClick={function () {
-                        window.parent.location.hash =
-                          'device,id:' + r.id;
-                      }}
-                      onMouseEnter={function (e) {
-                        e.currentTarget.style.backgroundColor =
-                          'var(--backgrounds-hover)';
-                      }}
-                      onMouseLeave={function (e) {
-                        e.currentTarget.style.backgroundColor = '';
-                      }}
-                    >
-                      <td style={styles.td}>{r.name}</td>
-                      <td style={styles.td}>{r.serial}</td>
-                      <td style={styles.tdRight}>
-                        {fmtTime(r.tripDuration)}
-                      </td>
-                      <td style={styles.tdRight}>
-                        {fmtTime(r.idleDuration)}
-                      </td>
-                      <td style={styles.tdRight}>
-                        {fmtPct(r.idlePct)}
-                      </td>
-                      <td style={styles.tdRight}>
-                        {r.fuelLevel !== null
-                          ? r.fuelLevel.toFixed(1) + '%'
-                          : '--'}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+          <Table
+            entities={sortedRows}
+            columns={columns}
+            sortable={sortable}
+            height="500px"
+          >
+            <Table.Empty>
+              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                {t(lang, 'noData')}
+              </div>
+            </Table.Empty>
+          </Table>
         </>
       )}
     </div>

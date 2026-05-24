@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Alert, Button, Waiting, DateInput } from '@geotab/zenith';
+import { Alert, Button, Waiting, DateInput, Table } from '@geotab/zenith';
 import '@geotab/zenith/dist/index.css';
 import { t } from '../i18n';
 
@@ -113,123 +113,73 @@ function MechanicView({ api, lang, onBack }) {
   var [data, setData] = useState(null);
   var [loading, setLoading] = useState(false);
   var [error, setError] = useState(null);
-  var [sortKey, setSortKey] = useState('faultCount');
-  var [sortDir, setSortDir] = useState('desc');
+  var [sortSettings, setSortSettings] = useState(null);
 
-  var loadData = useCallback(function () {
-    setLoading(true);
-    setError(null);
+  var sortable = sortSettings
+    ? { value: sortSettings, onChange: function (s) { setSortSettings(s); } }
+    : undefined;
 
-    var parsed = new Date(date);
-    if (isNaN(parsed.getTime())) {
-      parsed = new Date();
-    }
-    var fromDate = new Date(
-      parsed.getFullYear(),
-      parsed.getMonth(),
-      parsed.getDate(),
-      0, 0, 0
-    );
-    var toDate = new Date(
-      parsed.getFullYear(),
-      parsed.getMonth(),
-      parsed.getDate(),
-      23, 59, 59
-    );
-
-    api.multiCall(
-      [
-        ['Get', { typeName: 'Device' }],
-        [
-          'Get',
-          {
-            typeName: 'FaultData',
-            search: {
-              fromDate: fromDate.toISOString(),
-              toDate: toDate.toISOString(),
-            },
+  var columns = [
+    {
+      id: 'name',
+      name: 'name',
+      header: t(lang, 'vehicle'),
+      sortable: true,
+      meta: { defaultWidth: 200 },
+      render: function (entity) {
+        return React.createElement('span', {
+          style: { cursor: 'pointer', color: 'var(--text-hyperlink)' },
+          onClick: function () {
+            window.parent.location.hash = 'device,id:' + entity.id;
           },
-        ],
-      ],
-      function (results) {
-        var devices = results[0];
-        var faults = results[1];
-
-        var deviceMap = {};
-        devices.forEach(function (d) {
-          deviceMap[d.id] = d;
-        });
-
-        var faultMap = {};
-        faults.forEach(function (f) {
-          var devId = f.device.id;
-          if (!faultMap[devId]) {
-            faultMap[devId] = { count: 0, faults: [] };
-          }
-          faultMap[devId].count++;
-          faultMap[devId].faults.push(f);
-        });
-
-        var result = [];
-        Object.keys(faultMap).forEach(function (devId) {
-          var dev = deviceMap[devId];
-          if (!dev) return;
-          var entry = faultMap[devId];
-          var latest = entry.faults.sort(function (a, b) {
-            return new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime();
-          })[0];
-          var diagnosticName =
-            latest.diagnostic && latest.diagnostic.name
-              ? latest.diagnostic.name
-              : '--';
-          result.push({
-            id: devId,
-            name: dev.name || '--',
-            serial: dev.serialNumber || '--',
-            faultCount: entry.count,
-            latestFault: diagnosticName,
-            latestDate: latest.dateTime,
-          });
-        });
-
-        setData(result);
-        setLoading(false);
+        }, entity.name);
       },
-      function (err) {
-        setError(err.message || t(lang, 'error'));
-        setLoading(false);
-      }
-    );
-  }, [api, lang, date]);
+    },
+    {
+      id: 'serial',
+      name: 'serial',
+      header: t(lang, 'serial'),
+      sortable: true,
+      meta: { defaultWidth: 150 },
+    },
+    {
+      id: 'faultCount',
+      name: 'faultCount',
+      header: t(lang, 'faultCount'),
+      sortable: true,
+      meta: { defaultWidth: 100 },
+    },
+    {
+      id: 'latestFault',
+      name: 'latestFault',
+      header: t(lang, 'latestFault'),
+      sortable: true,
+      meta: { defaultWidth: 200 },
+    },
+    {
+      id: 'latestDate',
+      name: 'latestDate',
+      header: t(lang, 'latestDate'),
+      sortable: true,
+      meta: { defaultWidth: 180 },
+      render: function (entity) {
+        return fmtDate(entity.latestDate);
+      },
+    },
+  ];
 
-  useEffect(function () {
-    loadData();
-  }, [loadData]);
-
-  function toggleSort(key) {
-    if (sortKey === key) {
-      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(key);
-      setSortDir(key === 'faultCount' ? 'desc' : 'asc');
-    }
-  }
-
-  function sortArrow(key) {
-    if (sortKey !== key) return '';
-    return sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
-  }
-
-  var sorted = data
+  var sortedRows = data
     ? [].concat(data).sort(function (a, b) {
-        var va = a[sortKey];
-        var vb = b[sortKey];
+        var key = sortSettings ? sortSettings.sortColumn : 'faultCount';
+        var dir = sortSettings ? sortSettings.sortDirection : 'desc';
+        var va = a[key];
+        var vb = b[key];
         if (typeof va === 'string') {
-          return sortDir === 'asc'
+          return dir === 'asc'
             ? va.localeCompare(vb)
             : vb.localeCompare(va);
         }
-        return sortDir === 'asc' ? va - vb : vb - va;
+        return dir === 'asc' ? va - vb : vb - va;
       })
     : [];
 
@@ -304,117 +254,18 @@ function MechanicView({ api, lang, onBack }) {
             </div>
           </div>
 
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th
-                  style={{
-                    ...styles.th,
-                    ...(sortKey === 'name' ? styles.thActive : {}),
-                  }}
-                  onClick={function () {
-                    toggleSort('name');
-                  }}
-                >
-                  {t(lang, 'vehicle')}
-                  {sortArrow('name')}
-                </th>
-                <th
-                  style={{
-                    ...styles.th,
-                    ...(sortKey === 'serial' ? styles.thActive : {}),
-                  }}
-                  onClick={function () {
-                    toggleSort('serial');
-                  }}
-                >
-                  {t(lang, 'serial')}
-                  {sortArrow('serial')}
-                </th>
-                <th
-                  style={{
-                    ...styles.th,
-                    textAlign: 'right',
-                    ...(sortKey === 'faultCount'
-                      ? styles.thActive
-                      : {}),
-                  }}
-                  onClick={function () {
-                    toggleSort('faultCount');
-                  }}
-                >
-                  {t(lang, 'faultCount')}
-                  {sortArrow('faultCount')}
-                </th>
-                <th
-                  style={{
-                    ...styles.th,
-                    ...(sortKey === 'latestFault'
-                      ? styles.thActive
-                      : {}),
-                  }}
-                  onClick={function () {
-                    toggleSort('latestFault');
-                  }}
-                >
-                  {t(lang, 'latestFault')}
-                  {sortArrow('latestFault')}
-                </th>
-                <th
-                  style={{
-                    ...styles.th,
-                    textAlign: 'right',
-                    ...(sortKey === 'latestDate'
-                      ? styles.thActive
-                      : {}),
-                  }}
-                  onClick={function () {
-                    toggleSort('latestDate');
-                  }}
-                >
-                  {t(lang, 'latestDate')}
-                  {sortArrow('latestDate')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.length === 0 ? (
-                <tr>
-                  <td colSpan="5" style={styles.emptyState}>
-                    {t(lang, 'noFaults')}
-                  </td>
-                </tr>
-              ) : (
-                sorted.map(function (r) {
-                  return (
-                    <tr
-                      key={r.id}
-                      style={styles.clickableRow}
-                      onClick={function () {
-                        window.parent.location.hash =
-                          'device,id:' + r.id;
-                      }}
-                      onMouseEnter={function (e) {
-                        e.currentTarget.style.backgroundColor =
-                          'var(--backgrounds-hover)';
-                      }}
-                      onMouseLeave={function (e) {
-                        e.currentTarget.style.backgroundColor = '';
-                      }}
-                    >
-                      <td style={styles.td}>{r.name}</td>
-                      <td style={styles.td}>{r.serial}</td>
-                      <td style={styles.tdRight}>{r.faultCount}</td>
-                      <td style={styles.td}>{r.latestFault}</td>
-                      <td style={styles.tdRight}>
-                        {fmtDate(r.latestDate)}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+          <Table
+            entities={sortedRows}
+            columns={columns}
+            sortable={sortable}
+            height="500px"
+          >
+            <Table.Empty>
+              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                {t(lang, 'noFaults')}
+              </div>
+            </Table.Empty>
+          </Table>
         </>
       )}
     </div>
