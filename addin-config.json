@@ -1,0 +1,16 @@
+{
+  "name": "Fleet Dashboard",
+  "supportEmail": "https://github.com/tu-usuario/addin-geotab",
+  "version": "1.0.0",
+  "items": [
+    {
+      "url": "https://tu-usuario.github.io/addin-geotab/dist/addin.html",
+      "path": "ActivityLink/",
+      "menuName": {
+        "en": "Fleet Dashboard",
+        "es": "Panel de Flota",
+        "fr": "Tableau de Bord"
+      }
+    }
+  ]
+}
