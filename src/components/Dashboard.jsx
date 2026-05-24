@@ -158,14 +158,35 @@ function Dashboard({ api, state }) {
             },
           },
         ],
+        [
+          'Get',
+          {
+            typeName: 'StatusData',
+            search: {
+              diagnosticSearch: { id: 'DiagnosticFuelLevelId' },
+              fromDate: fromDate.toISOString(),
+              toDate: toDate.toISOString(),
+            },
+          },
+        ],
       ],
       function (results) {
         var devices = results[0];
         var trips = results[1];
+        var statusData = results[2];
 
         var deviceMap = {};
         devices.forEach(function (d) {
           deviceMap[d.id] = d;
+        });
+
+        var fuelMap = {};
+        statusData.forEach(function (s) {
+          var devId = s.device.id;
+          var dt = new Date(s.dateTime).getTime();
+          if (!fuelMap[devId] || dt > fuelMap[devId].time) {
+            fuelMap[devId] = { time: dt, value: Number(s.data) };
+          }
         });
 
         var totals = {};
@@ -211,6 +232,7 @@ function Dashboard({ api, state }) {
             tripDuration: t.tripDuration,
             idleDuration: t.idleDuration,
             idlePct: pct,
+            fuelLevel: fuelMap[devId] ? fuelMap[devId].value : null,
           });
         });
 
@@ -270,6 +292,22 @@ function Dashboard({ api, state }) {
       ? (totalFleetIdle / totalFleetTrip) * 100
       : 0;
 
+  var fuelLevels = rows
+    ? rows
+        .map(function (r) {
+          return r.fuelLevel;
+        })
+        .filter(function (v) {
+          return v !== null && v !== undefined;
+        })
+    : [];
+  var avgFuel =
+    fuelLevels.length > 0
+      ? fuelLevels.reduce(function (s, v) {
+          return s + v;
+        }, 0) / fuelLevels.length
+      : null;
+
   return (
     <div style={styles.page}>
       <div style={styles.header}>
@@ -321,6 +359,12 @@ function Dashboard({ api, state }) {
               <div style={styles.cardLabel}>{t(lang, 'idlePercent')}</div>
               <div style={styles.cardValue}>
                 {fmtPct(fleetIdlePct)}
+              </div>
+            </div>
+            <div style={styles.card}>
+              <div style={styles.cardLabel}>{t(lang, 'fuel')}</div>
+              <div style={styles.cardValue}>
+                {avgFuel !== null ? avgFuel.toFixed(1) + '%' : '--'}
               </div>
             </div>
           </div>
@@ -395,12 +439,25 @@ function Dashboard({ api, state }) {
                   {t(lang, 'idlePercent')}
                   {sortArrow('idlePct')}
                 </th>
+                <th
+                  style={{
+                    ...styles.th,
+                    textAlign: 'right',
+                    ...(sortKey === 'fuelLevel' ? styles.thActive : {}),
+                  }}
+                  onClick={function () {
+                    toggleSort('fuelLevel');
+                  }}
+                >
+                  {t(lang, 'fuel')}
+                  {sortArrow('fuelLevel')}
+                </th>
               </tr>
             </thead>
             <tbody>
               {sorted.length === 0 ? (
                 <tr>
-                  <td colSpan="5" style={styles.emptyState}>
+                  <td colSpan="6" style={styles.emptyState}>
                     {t(lang, 'noData')}
                   </td>
                 </tr>
@@ -432,6 +489,11 @@ function Dashboard({ api, state }) {
                       </td>
                       <td style={styles.tdRight}>
                         {fmtPct(r.idlePct)}
+                      </td>
+                      <td style={styles.tdRight}>
+                        {r.fuelLevel !== null
+                          ? r.fuelLevel.toFixed(1) + '%'
+                          : '--'}
                       </td>
                     </tr>
                   );
