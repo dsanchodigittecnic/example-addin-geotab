@@ -34,7 +34,8 @@ module.exports = {
     new HtmlWebpackPlugin({
       template: './src/index.html',
       filename: 'addin.html',
-      inject: true,
+      inject: 'body',
+      scriptLoading: 'blocking',
     }),
     new MiniCssExtractPlugin({
       filename: 'addin.css',
