@@ -20,11 +20,6 @@ var styles = {
     fontWeight: 500,
     margin: 0,
   },
-  sessionInfo: {
-    marginBottom: '24px',
-    fontSize: '14px',
-    color: 'var(--text-secondary)',
-  },
   grid: {
     display: 'flex',
     gap: '16px',
@@ -86,7 +81,6 @@ var styles = {
 
 function Dashboard({ api, state }) {
   var lang = (state && state.language) || 'en';
-  var [session, setSession] = useState(null);
   var [vehicles, setVehicles] = useState(null);
   var [drivers, setDrivers] = useState(null);
   var [error, setError] = useState(null);
@@ -112,10 +106,6 @@ function Dashboard({ api, state }) {
         setLoading(false);
       }
     );
-
-    api.getSession(function (s) {
-      setSession(s);
-    });
   }, [api, lang]);
 
   useEffect(function () {
@@ -139,13 +129,6 @@ function Dashboard({ api, state }) {
           {t(lang, 'refresh')}
         </Button>
       </div>
-
-      {session && (
-        <div style={styles.sessionInfo}>
-          {t(lang, 'connectedAs')}: <strong>{session.userName}</strong> &mdash;{' '}
-          {t(lang, 'database')}: <strong>{session.database}</strong>
-        </div>
-      )}
 
       {error && (
         <Alert variant="error" style={{ marginBottom: '16px' }}>
