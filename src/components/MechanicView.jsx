@@ -2,16 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Alert, Button, Waiting, DateInput } from '@geotab/zenith';
 import '@geotab/zenith/dist/index.css';
 import { t } from '../i18n';
-import MechanicView from './MechanicView';
 
-function fmtTime(sec) {
-  var h = Math.floor(sec / 3600);
-  var m = Math.floor((sec % 3600) / 60);
-  return h + 'h ' + m + 'm';
-}
-
-function fmtPct(val) {
-  return val.toFixed(1) + '%';
+function fmtDate(iso) {
+  if (!iso) return '--';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '--';
+  return d.toLocaleString();
 }
 
 function todayStr() {
@@ -112,14 +108,12 @@ var styles = {
   },
 };
 
-function Dashboard({ api, state }) {
-  var lang = (state && state.language) || 'en';
-  var [view, setView] = useState('dashboard');
+function MechanicView({ api, lang, onBack }) {
   var [date, setDate] = useState(todayStr);
-  var [rows, setRows] = useState(null);
+  var [data, setData] = useState(null);
+  var [loading, setLoading] = useState(false);
   var [error, setError] = useState(null);
-  var [loading, setLoading] = useState(true);
-  var [sortKey, setSortKey] = useState('idlePct');
+  var [sortKey, setSortKey] = useState('faultCount');
   var [sortDir, setSortDir] = useState('desc');
 
   var loadData = useCallback(function () {
@@ -134,17 +128,13 @@ function Dashboard({ api, state }) {
       parsed.getFullYear(),
       parsed.getMonth(),
       parsed.getDate(),
-      0,
-      0,
-      0
+      0, 0, 0
     );
     var toDate = new Date(
       parsed.getFullYear(),
       parsed.getMonth(),
       parsed.getDate(),
-      23,
-      59,
-      59
+      23, 59, 59
     );
 
     api.multiCall(
@@ -153,19 +143,8 @@ function Dashboard({ api, state }) {
         [
           'Get',
           {
-            typeName: 'Trip',
+            typeName: 'FaultData',
             search: {
-              fromDate: fromDate.toISOString(),
-              toDate: toDate.toISOString(),
-            },
-          },
-        ],
-        [
-          'Get',
-          {
-            typeName: 'StatusData',
-            search: {
-              diagnosticSearch: { id: 'DiagnosticFuelLevelId' },
               fromDate: fromDate.toISOString(),
               toDate: toDate.toISOString(),
             },
@@ -174,71 +153,46 @@ function Dashboard({ api, state }) {
       ],
       function (results) {
         var devices = results[0];
-        var trips = results[1];
-        var statusData = results[2];
+        var faults = results[1];
 
         var deviceMap = {};
         devices.forEach(function (d) {
           deviceMap[d.id] = d;
         });
 
-        var fuelMap = {};
-        statusData.forEach(function (s) {
-          var devId = s.device.id;
-          var dt = new Date(s.dateTime).getTime();
-          if (!fuelMap[devId] || dt > fuelMap[devId].time) {
-            fuelMap[devId] = { time: dt, value: Number(s.data) };
+        var faultMap = {};
+        faults.forEach(function (f) {
+          var devId = f.device.id;
+          if (!faultMap[devId]) {
+            faultMap[devId] = { count: 0, faults: [] };
           }
-        });
-
-        var totals = {};
-        trips.forEach(function (t) {
-          var devId = t.device.id;
-          if (!totals[devId]) {
-            totals[devId] = {
-              idleDuration: 0,
-              tripDuration: 0,
-            };
-          }
-          var tripSec = 0;
-          if (t.start && t.stop) {
-            var ms =
-              new Date(t.stop).getTime() -
-              new Date(t.start).getTime();
-            if (!isNaN(ms)) tripSec = ms / 1000;
-          }
-          var idleVal = t.idlingDuration;
-          var idleSec = 0;
-          if (typeof idleVal === 'number') {
-            idleSec = idleVal;
-          } else if (idleVal && idleVal.totalSeconds) {
-            idleSec = idleVal.totalSeconds;
-          }
-          totals[devId].idleDuration += idleSec;
-          totals[devId].tripDuration += tripSec;
+          faultMap[devId].count++;
+          faultMap[devId].faults.push(f);
         });
 
         var result = [];
-        Object.keys(totals).forEach(function (devId) {
+        Object.keys(faultMap).forEach(function (devId) {
           var dev = deviceMap[devId];
           if (!dev) return;
-          var t = totals[devId];
-          var pct =
-            t.tripDuration > 0
-              ? (t.idleDuration / t.tripDuration) * 100
-              : 0;
+          var entry = faultMap[devId];
+          var latest = entry.faults.sort(function (a, b) {
+            return new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime();
+          })[0];
+          var diagnosticName =
+            latest.diagnostic && latest.diagnostic.name
+              ? latest.diagnostic.name
+              : '--';
           result.push({
             id: devId,
             name: dev.name || '--',
             serial: dev.serialNumber || '--',
-            tripDuration: t.tripDuration,
-            idleDuration: t.idleDuration,
-            idlePct: pct,
-            fuelLevel: fuelMap[devId] ? fuelMap[devId].value : null,
+            faultCount: entry.count,
+            latestFault: diagnosticName,
+            latestDate: latest.dateTime,
           });
         });
 
-        setRows(result);
+        setData(result);
         setLoading(false);
       },
       function (err) {
@@ -257,7 +211,7 @@ function Dashboard({ api, state }) {
       setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     } else {
       setSortKey(key);
-      setSortDir(key === 'idlePct' ? 'desc' : 'asc');
+      setSortDir(key === 'faultCount' ? 'desc' : 'asc');
     }
   }
 
@@ -266,8 +220,8 @@ function Dashboard({ api, state }) {
     return sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
   }
 
-  var sorted = rows
-    ? [].concat(rows).sort(function (a, b) {
+  var sorted = data
+    ? [].concat(data).sort(function (a, b) {
         var va = a[sortKey];
         var vb = b[sortKey];
         if (typeof va === 'string') {
@@ -279,48 +233,26 @@ function Dashboard({ api, state }) {
       })
     : [];
 
-  var totalFleetIdle = rows
-    ? rows.reduce(function (s, r) {
-        return s + r.idleDuration;
+  var totalDevices = data ? data.length : 0;
+  var totalFaults = data
+    ? data.reduce(function (s, r) {
+        return s + r.faultCount;
       }, 0)
     : 0;
-  var totalFleetTrip = rows
-    ? rows.reduce(function (s, r) {
-        return s + r.tripDuration;
-      }, 0)
-    : 0;
-  var fleetIdlePct =
-    totalFleetTrip > 0
-      ? (totalFleetIdle / totalFleetTrip) * 100
-      : 0;
 
-  var fuelLevels = rows
-    ? rows
-        .map(function (r) {
-          return r.fuelLevel;
-        })
-        .filter(function (v) {
-          return v !== null && v !== undefined;
-        })
-    : [];
-  var avgFuel =
-    fuelLevels.length > 0
-      ? fuelLevels.reduce(function (s, v) {
-          return s + v;
-        }, 0) / fuelLevels.length
-      : null;
-
-  return view === 'mechanic' ? (
-    <MechanicView api={api} lang={lang} onBack={function () { setView('dashboard'); }} />
-  ) : (
+  return (
     <div style={styles.page}>
       <div style={styles.header}>
-        <h1 style={styles.title}>{t(lang, 'appTitle')}</h1>
+        <h1 style={styles.title}>{t(lang, 'mechanicTitle')}</h1>
         <div>
-          <Button variant="secondary" onClick={function () { setView('mechanic'); }}>
-            {t(lang, 'mechanic')}
+          <Button
+            variant="secondary"
+            onClick={onBack}
+            style={{ marginRight: '8px' }}
+          >
+            {t(lang, 'back')}
           </Button>
-          <Button variant="primary" onClick={loadData} style={{ marginLeft: '8px' }}>
+          <Button variant="primary" onClick={loadData}>
             {t(lang, 'refresh')}
           </Button>
         </div>
@@ -353,27 +285,21 @@ function Dashboard({ api, state }) {
         <>
           <div style={styles.summary}>
             <div style={styles.card}>
-              <div style={styles.cardLabel}>{t(lang, 'tripTime')}</div>
-              <div style={styles.cardValue}>
-                {fmtTime(totalFleetTrip)}
+              <div style={styles.cardLabel}>
+                {t(lang, 'devicesWithFaults')}
               </div>
+              <div style={styles.cardValue}>{totalDevices}</div>
             </div>
             <div style={styles.card}>
-              <div style={styles.cardLabel}>{t(lang, 'idleTime')}</div>
-              <div style={styles.cardValue}>
-                {fmtTime(totalFleetIdle)}
-              </div>
+              <div style={styles.cardLabel}>{t(lang, 'totalFaults')}</div>
+              <div style={styles.cardValue}>{totalFaults}</div>
             </div>
             <div style={styles.card}>
-              <div style={styles.cardLabel}>{t(lang, 'idlePercent')}</div>
+              <div style={styles.cardLabel}>{t(lang, 'avgFaults')}</div>
               <div style={styles.cardValue}>
-                {fmtPct(fleetIdlePct)}
-              </div>
-            </div>
-            <div style={styles.card}>
-              <div style={styles.cardLabel}>{t(lang, 'fuel')}</div>
-              <div style={styles.cardValue}>
-                {avgFuel !== null ? avgFuel.toFixed(1) + '%' : '--'}
+                {totalDevices > 0
+                  ? (totalFaults / totalDevices).toFixed(1)
+                  : '0'}
               </div>
             </div>
           </div>
@@ -409,65 +335,53 @@ function Dashboard({ api, state }) {
                   style={{
                     ...styles.th,
                     textAlign: 'right',
-                    ...(sortKey === 'tripDuration'
+                    ...(sortKey === 'faultCount'
                       ? styles.thActive
                       : {}),
                   }}
                   onClick={function () {
-                    toggleSort('tripDuration');
+                    toggleSort('faultCount');
                   }}
                 >
-                  {t(lang, 'tripTime')}
-                  {sortArrow('tripDuration')}
+                  {t(lang, 'faultCount')}
+                  {sortArrow('faultCount')}
                 </th>
                 <th
                   style={{
                     ...styles.th,
-                    textAlign: 'right',
-                    ...(sortKey === 'idleDuration'
+                    ...(sortKey === 'latestFault'
                       ? styles.thActive
                       : {}),
                   }}
                   onClick={function () {
-                    toggleSort('idleDuration');
+                    toggleSort('latestFault');
                   }}
                 >
-                  {t(lang, 'idleTime')}
-                  {sortArrow('idleDuration')}
+                  {t(lang, 'latestFault')}
+                  {sortArrow('latestFault')}
                 </th>
                 <th
                   style={{
                     ...styles.th,
                     textAlign: 'right',
-                    ...(sortKey === 'idlePct' ? styles.thActive : {}),
+                    ...(sortKey === 'latestDate'
+                      ? styles.thActive
+                      : {}),
                   }}
                   onClick={function () {
-                    toggleSort('idlePct');
+                    toggleSort('latestDate');
                   }}
                 >
-                  {t(lang, 'idlePercent')}
-                  {sortArrow('idlePct')}
-                </th>
-                <th
-                  style={{
-                    ...styles.th,
-                    textAlign: 'right',
-                    ...(sortKey === 'fuelLevel' ? styles.thActive : {}),
-                  }}
-                  onClick={function () {
-                    toggleSort('fuelLevel');
-                  }}
-                >
-                  {t(lang, 'fuel')}
-                  {sortArrow('fuelLevel')}
+                  {t(lang, 'latestDate')}
+                  {sortArrow('latestDate')}
                 </th>
               </tr>
             </thead>
             <tbody>
               {sorted.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={styles.emptyState}>
-                    {t(lang, 'noData')}
+                  <td colSpan="5" style={styles.emptyState}>
+                    {t(lang, 'noFaults')}
                   </td>
                 </tr>
               ) : (
@@ -490,19 +404,10 @@ function Dashboard({ api, state }) {
                     >
                       <td style={styles.td}>{r.name}</td>
                       <td style={styles.td}>{r.serial}</td>
+                      <td style={styles.tdRight}>{r.faultCount}</td>
+                      <td style={styles.td}>{r.latestFault}</td>
                       <td style={styles.tdRight}>
-                        {fmtTime(r.tripDuration)}
-                      </td>
-                      <td style={styles.tdRight}>
-                        {fmtTime(r.idleDuration)}
-                      </td>
-                      <td style={styles.tdRight}>
-                        {fmtPct(r.idlePct)}
-                      </td>
-                      <td style={styles.tdRight}>
-                        {r.fuelLevel !== null
-                          ? r.fuelLevel.toFixed(1) + '%'
-                          : '--'}
+                        {fmtDate(r.latestDate)}
                       </td>
                     </tr>
                   );
@@ -516,4 +421,4 @@ function Dashboard({ api, state }) {
   );
 }
 
-export default Dashboard;
+export default MechanicView;
