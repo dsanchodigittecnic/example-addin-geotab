@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "items": [
     {
-      "url": "https://tu-usuario.github.io/addin-geotab/dist/addin.html",
+      "url": "https://tu-usuario.github.io/addin-geotab/addin.html",
       "path": "ActivityLink/",
       "menuName": {
         "en": "Fleet Dashboard",

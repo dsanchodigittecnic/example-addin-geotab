@@ -4,7 +4,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 module.exports = {
   entry: './src/index.jsx',
   output: {
-    path: path.resolve(__dirname, 'dist'),
+    path: path.resolve(__dirname, 'docs'),
     filename: 'addin.js',
     clean: true,
   },
@@ -37,7 +37,7 @@ module.exports = {
     }),
   ],
   devServer: {
-    static: './dist',
+    static: './docs',
     port: 3000,
     hot: true,
   },
