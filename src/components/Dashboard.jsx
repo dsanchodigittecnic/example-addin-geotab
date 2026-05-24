@@ -124,8 +124,26 @@ function Dashboard({ api, state }) {
     setLoading(true);
     setError(null);
 
-    var fromDate = new Date(date + 'T00:00:00Z');
-    var toDate = new Date(date + 'T23:59:59Z');
+    var parsed = new Date(date);
+    if (isNaN(parsed.getTime())) {
+      parsed = new Date();
+    }
+    var fromDate = new Date(
+      parsed.getFullYear(),
+      parsed.getMonth(),
+      parsed.getDate(),
+      0,
+      0,
+      0
+    );
+    var toDate = new Date(
+      parsed.getFullYear(),
+      parsed.getMonth(),
+      parsed.getDate(),
+      23,
+      59,
+      59
+    );
 
     api.multiCall(
       [
@@ -159,8 +177,13 @@ function Dashboard({ api, state }) {
               tripDuration: 0,
             };
           }
-          var tripSec =
-            (new Date(t.stop).getTime() - new Date(t.start).getTime()) / 1000;
+          var tripSec = 0;
+          if (t.start && t.stop) {
+            var ms =
+              new Date(t.stop).getTime() -
+              new Date(t.start).getTime();
+            if (!isNaN(ms)) tripSec = ms / 1000;
+          }
           totals[devId].idleDuration += t.idleDuration || 0;
           totals[devId].tripDuration += tripSec;
         });
