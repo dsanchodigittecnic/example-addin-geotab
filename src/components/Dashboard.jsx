@@ -66,6 +66,9 @@ var styles = {
     borderBottom: '1px solid var(--borders-general)',
     fontSize: '14px',
   },
+  clickableRow: {
+    cursor: 'pointer',
+  },
   emptyState: {
     padding: '24px',
     textAlign: 'center',
@@ -201,7 +204,20 @@ function Dashboard({ api, state }) {
               ) : (
                 filteredVehicles.map(function (v) {
                   return (
-                    <tr key={v.id}>
+                    <tr
+                      key={v.id}
+                      style={styles.clickableRow}
+                      onClick={function () {
+                        window.parent.location.hash = 'device,id:' + v.id;
+                      }}
+                      onMouseEnter={function (e) {
+                        e.currentTarget.style.backgroundColor =
+                          'var(--backgrounds-hover)';
+                      }}
+                      onMouseLeave={function (e) {
+                        e.currentTarget.style.backgroundColor = '';
+                      }}
+                    >
                       <td style={styles.td}>{v.name || '--'}</td>
                       <td style={styles.td}>{v.serialNumber || '--'}</td>
                     </tr>
