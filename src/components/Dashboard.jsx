@@ -1,7 +1,25 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Alert, Button, Waiting, TextInput } from '@geotab/zenith';
+import { Alert, Button, Waiting, DateInput } from '@geotab/zenith';
 import '@geotab/zenith/dist/index.css';
 import { t } from '../i18n';
+
+function fmtTime(sec) {
+  var h = Math.floor(sec / 3600);
+  var m = Math.floor((sec % 3600) / 60);
+  return h + 'h ' + m + 'm';
+}
+
+function fmtPct(val) {
+  return val.toFixed(1) + '%';
+}
+
+function todayStr() {
+  var d = new Date();
+  var y = d.getFullYear();
+  var m = String(d.getMonth() + 1).padStart(2, '0');
+  var day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
 
 var styles = {
   page: {
@@ -20,7 +38,13 @@ var styles = {
     fontWeight: 500,
     margin: 0,
   },
-  grid: {
+  filters: {
+    display: 'flex',
+    gap: '16px',
+    alignItems: 'flex-end',
+    marginBottom: '24px',
+  },
+  summary: {
     display: 'flex',
     gap: '16px',
     marginBottom: '24px',
@@ -45,21 +69,32 @@ var styles = {
   table: {
     width: '100%',
     borderCollapse: 'collapse',
-    marginTop: '16px',
   },
   th: {
     padding: '12px',
-    borderBottom: '1px solid var(--borders-general)',
+    borderBottom: '2px solid var(--borders-general)',
     textAlign: 'left',
     fontSize: '12px',
     fontWeight: 600,
     textTransform: 'uppercase',
     color: 'var(--text-secondary)',
+    cursor: 'pointer',
+    userSelect: 'none',
+  },
+  thActive: {
+    color: 'var(--action-primary--default)',
   },
   td: {
     padding: '12px',
     borderBottom: '1px solid var(--borders-general)',
     fontSize: '14px',
+  },
+  tdRight: {
+    padding: '12px',
+    borderBottom: '1px solid var(--borders-general)',
+    fontSize: '14px',
+    textAlign: 'right',
+    fontVariantNumeric: 'tabular-nums',
   },
   clickableRow: {
     cursor: 'pointer',
@@ -74,31 +109,82 @@ var styles = {
     justifyContent: 'center',
     padding: '48px',
   },
-  searchWrap: {
-    marginBottom: '8px',
-  },
 };
 
 function Dashboard({ api, state }) {
   var lang = (state && state.language) || 'en';
-  var [vehicles, setVehicles] = useState(null);
-  var [drivers, setDrivers] = useState(null);
+  var [date, setDate] = useState(todayStr);
+  var [rows, setRows] = useState(null);
   var [error, setError] = useState(null);
   var [loading, setLoading] = useState(true);
-  var [search, setSearch] = useState('');
+  var [sortKey, setSortKey] = useState('idlePct');
+  var [sortDir, setSortDir] = useState('desc');
 
   var loadData = useCallback(function () {
     setLoading(true);
     setError(null);
 
+    var fromDate = new Date(date + 'T00:00:00Z');
+    var toDate = new Date(date + 'T23:59:59Z');
+
     api.multiCall(
       [
         ['Get', { typeName: 'Device' }],
-        ['Get', { typeName: 'User', search: { isDriver: true } }],
+        [
+          'Get',
+          {
+            typeName: 'Trip',
+            search: {
+              fromDate: fromDate.toISOString(),
+              toDate: toDate.toISOString(),
+            },
+          },
+        ],
       ],
       function (results) {
-        setVehicles(results[0]);
-        setDrivers(results[1]);
+        var devices = results[0];
+        var trips = results[1];
+
+        var deviceMap = {};
+        devices.forEach(function (d) {
+          deviceMap[d.id] = d;
+        });
+
+        var totals = {};
+        trips.forEach(function (t) {
+          var devId = t.device.id;
+          if (!totals[devId]) {
+            totals[devId] = {
+              idleDuration: 0,
+              tripDuration: 0,
+            };
+          }
+          var tripSec =
+            (new Date(t.stop).getTime() - new Date(t.start).getTime()) / 1000;
+          totals[devId].idleDuration += t.idleDuration || 0;
+          totals[devId].tripDuration += tripSec;
+        });
+
+        var result = [];
+        Object.keys(totals).forEach(function (devId) {
+          var dev = deviceMap[devId];
+          if (!dev) return;
+          var t = totals[devId];
+          var pct =
+            t.tripDuration > 0
+              ? (t.idleDuration / t.tripDuration) * 100
+              : 0;
+          result.push({
+            id: devId,
+            name: dev.name || '--',
+            serial: dev.serialNumber || '--',
+            tripDuration: t.tripDuration,
+            idleDuration: t.idleDuration,
+            idlePct: pct,
+          });
+        });
+
+        setRows(result);
         setLoading(false);
       },
       function (err) {
@@ -106,20 +192,53 @@ function Dashboard({ api, state }) {
         setLoading(false);
       }
     );
-  }, [api, lang]);
+  }, [api, lang, date]);
 
   useEffect(function () {
     loadData();
   }, [loadData]);
 
-  var filteredVehicles = vehicles
-    ? vehicles.filter(function (v) {
-        var name = (v.name || '').toLowerCase();
-        var serial = (v.serialNumber || '').toLowerCase();
-        var q = search.toLowerCase();
-        return name.indexOf(q) !== -1 || serial.indexOf(q) !== -1;
+  function toggleSort(key) {
+    if (sortKey === key) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'idlePct' ? 'desc' : 'asc');
+    }
+  }
+
+  function sortArrow(key) {
+    if (sortKey !== key) return '';
+    return sortDir === 'asc' ? ' \u25B2' : ' \u25BC';
+  }
+
+  var sorted = rows
+    ? [].concat(rows).sort(function (a, b) {
+        var va = a[sortKey];
+        var vb = b[sortKey];
+        if (typeof va === 'string') {
+          return sortDir === 'asc'
+            ? va.localeCompare(vb)
+            : vb.localeCompare(va);
+        }
+        return sortDir === 'asc' ? va - vb : vb - va;
       })
     : [];
+
+  var totalFleetIdle = rows
+    ? rows.reduce(function (s, r) {
+        return s + r.idleDuration;
+      }, 0)
+    : 0;
+  var totalFleetTrip = rows
+    ? rows.reduce(function (s, r) {
+        return s + r.tripDuration;
+      }, 0)
+    : 0;
+  var fleetIdlePct =
+    totalFleetTrip > 0
+      ? (totalFleetIdle / totalFleetTrip) * 100
+      : 0;
 
   return (
     <div style={styles.page}>
@@ -128,6 +247,19 @@ function Dashboard({ api, state }) {
         <Button variant="primary" onClick={loadData}>
           {t(lang, 'refresh')}
         </Button>
+      </div>
+
+      <div style={styles.filters}>
+        <div style={{ width: '200px' }}>
+          <DateInput
+            label={t(lang, 'date')}
+            value={date}
+            onChange={function (v) {
+              if (v) setDate(v);
+            }}
+            disableFutureDates
+          />
+        </div>
       </div>
 
       {error && (
@@ -142,56 +274,115 @@ function Dashboard({ api, state }) {
         </div>
       ) : (
         <>
-          <div style={styles.grid}>
+          <div style={styles.summary}>
             <div style={styles.card}>
-              <div style={styles.cardLabel}>{t(lang, 'totalVehicles')}</div>
+              <div style={styles.cardLabel}>{t(lang, 'tripTime')}</div>
               <div style={styles.cardValue}>
-                {vehicles ? vehicles.length : '--'}
+                {fmtTime(totalFleetTrip)}
               </div>
             </div>
             <div style={styles.card}>
-              <div style={styles.cardLabel}>{t(lang, 'totalDrivers')}</div>
+              <div style={styles.cardLabel}>{t(lang, 'idleTime')}</div>
               <div style={styles.cardValue}>
-                {drivers ? drivers.length : '--'}
+                {fmtTime(totalFleetIdle)}
               </div>
             </div>
-          </div>
-
-          <div style={styles.searchWrap}>
-            <TextInput
-              label={t(lang, 'vehicles')}
-              value={search}
-              onChange={function (e) {
-                setSearch(e.target.value);
-              }}
-              placeholder={t(lang, 'vehicles') + '...'}
-            />
+            <div style={styles.card}>
+              <div style={styles.cardLabel}>{t(lang, 'idlePercent')}</div>
+              <div style={styles.cardValue}>
+                {fmtPct(fleetIdlePct)}
+              </div>
+            </div>
           </div>
 
           <table style={styles.table}>
             <thead>
               <tr>
-                <th style={styles.th}>{t(lang, 'vehicles')}</th>
-                <th style={styles.th}>Serial</th>
+                <th
+                  style={{
+                    ...styles.th,
+                    ...(sortKey === 'name' ? styles.thActive : {}),
+                  }}
+                  onClick={function () {
+                    toggleSort('name');
+                  }}
+                >
+                  {t(lang, 'vehicle')}
+                  {sortArrow('name')}
+                </th>
+                <th
+                  style={{
+                    ...styles.th,
+                    ...(sortKey === 'serial' ? styles.thActive : {}),
+                  }}
+                  onClick={function () {
+                    toggleSort('serial');
+                  }}
+                >
+                  {t(lang, 'serial')}
+                  {sortArrow('serial')}
+                </th>
+                <th
+                  style={{
+                    ...styles.th,
+                    textAlign: 'right',
+                    ...(sortKey === 'tripDuration'
+                      ? styles.thActive
+                      : {}),
+                  }}
+                  onClick={function () {
+                    toggleSort('tripDuration');
+                  }}
+                >
+                  {t(lang, 'tripTime')}
+                  {sortArrow('tripDuration')}
+                </th>
+                <th
+                  style={{
+                    ...styles.th,
+                    textAlign: 'right',
+                    ...(sortKey === 'idleDuration'
+                      ? styles.thActive
+                      : {}),
+                  }}
+                  onClick={function () {
+                    toggleSort('idleDuration');
+                  }}
+                >
+                  {t(lang, 'idleTime')}
+                  {sortArrow('idleDuration')}
+                </th>
+                <th
+                  style={{
+                    ...styles.th,
+                    textAlign: 'right',
+                    ...(sortKey === 'idlePct' ? styles.thActive : {}),
+                  }}
+                  onClick={function () {
+                    toggleSort('idlePct');
+                  }}
+                >
+                  {t(lang, 'idlePercent')}
+                  {sortArrow('idlePct')}
+                </th>
               </tr>
             </thead>
             <tbody>
-              {filteredVehicles.length === 0 ? (
+              {sorted.length === 0 ? (
                 <tr>
-                  <td colSpan="2" style={styles.emptyState}>
-                    {vehicles && vehicles.length === 0
-                      ? t(lang, 'loading')
-                      : t(lang, 'error')}
+                  <td colSpan="5" style={styles.emptyState}>
+                    {t(lang, 'noData')}
                   </td>
                 </tr>
               ) : (
-                filteredVehicles.map(function (v) {
+                sorted.map(function (r) {
                   return (
                     <tr
-                      key={v.id}
+                      key={r.id}
                       style={styles.clickableRow}
                       onClick={function () {
-                        window.parent.location.hash = 'device,id:' + v.id;
+                        window.parent.location.hash =
+                          'device,id:' + r.id;
                       }}
                       onMouseEnter={function (e) {
                         e.currentTarget.style.backgroundColor =
@@ -201,8 +392,17 @@ function Dashboard({ api, state }) {
                         e.currentTarget.style.backgroundColor = '';
                       }}
                     >
-                      <td style={styles.td}>{v.name || '--'}</td>
-                      <td style={styles.td}>{v.serialNumber || '--'}</td>
+                      <td style={styles.td}>{r.name}</td>
+                      <td style={styles.td}>{r.serial}</td>
+                      <td style={styles.tdRight}>
+                        {fmtTime(r.tripDuration)}
+                      </td>
+                      <td style={styles.tdRight}>
+                        {fmtTime(r.idleDuration)}
+                      </td>
+                      <td style={styles.tdRight}>
+                        {fmtPct(r.idlePct)}
+                      </td>
                     </tr>
                   );
                 })
