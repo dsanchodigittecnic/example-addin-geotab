@@ -440,6 +440,7 @@ function Dashboard({ api, state }) {
             entities={sortedRows}
             columns={columns}
             sortable={sortable}
+            flexible={{ pageName: 'dashboard-table' }}
             height="500px"
           >
             <Table.Empty>

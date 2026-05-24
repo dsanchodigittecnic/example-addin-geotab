@@ -258,6 +258,7 @@ function MechanicView({ api, lang, onBack }) {
             entities={sortedRows}
             columns={columns}
             sortable={sortable}
+            flexible={{ pageName: 'mechanic-table' }}
             height="500px"
           >
             <Table.Empty>
